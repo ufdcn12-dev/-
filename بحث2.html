@@ -1,0 +1,798 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام الاستعلام عن النتائج</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+font-family:Arial,sans-serif;
+background:#777777;
+min-height:100vh;
+}
+
+.header{
+width:100%;
+background:linear-gradient(135deg,#0755a5,#00366f);
+color:white;
+text-align:center;
+padding:22px 10px;
+box-shadow:0 3px 10px rgba(0,0,0,.3);
+}
+
+.header div{line-height:1.8}
+.ministry{font-size:23px;font-weight:bold}
+.directorate{font-size:21px;font-weight:bold}
+.school{font-size:20px;font-weight:bold}
+.system{
+font-size:23px;
+font-weight:bold;
+color:#ffdf70;
+margin-top:5px;
+}
+
+.search-container{
+width:92%;
+max-width:650px;
+margin:65px auto;
+background:#eeeeee;
+padding:25px;
+border-radius:10px;
+box-shadow:0 5px 15px rgba(0,0,0,.2);
+}
+
+.search-title{
+text-align:center;
+font-size:21px;
+font-weight:bold;
+color:#222;
+margin-bottom:15px;
+}
+
+.search-input{
+width:100%;
+height:55px;
+background:white;
+border:1px solid #bbb;
+border-radius:6px;
+outline:none;
+padding:12px;
+font-size:18px;
+text-align:center;
+}
+
+.search-input:focus{border:2px solid #218838}
+
+.search-button{
+width:100%;
+height:53px;
+margin-top:15px;
+background:#218838;
+color:white;
+border:none;
+border-radius:6px;
+font-size:20px;
+font-weight:bold;
+cursor:pointer;
+}
+
+.search-button:active{background:#176b2c}
+
+.message{
+text-align:center;
+font-size:17px;
+font-weight:bold;
+margin-top:20px;
+color:#333;
+line-height:1.8;
+}
+
+#resultArea{margin-top:20px;width:100%}
+
+.result-card{
+background:white;
+border-radius:9px;
+padding:15px;
+margin-top:15px;
+box-shadow:0 3px 10px #0002;
+}
+
+.result-card h3{
+color:#0755a5;
+text-align:center;
+margin-bottom:12px;
+}
+
+.result-info{
+text-align:center;
+line-height:2;
+font-weight:bold;
+margin-bottom:12px;
+}
+
+.result-table-wrap{overflow-x:auto}
+
+.result-table{
+width:100%;
+min-width:700px;
+border-collapse:collapse;
+background:white;
+}
+
+.result-table th,.result-table td{
+border:1px solid #aaa;
+padding:8px 4px;
+text-align:center;
+}
+
+.result-table th{
+background:#0755a5;
+color:white;
+font-size:13px;
+}
+
+.result-table td:first-child{
+background:#e2e8f0;
+font-weight:bold;
+}
+
+.blocked-result{
+background:#fff0f0;
+border:2px solid #c62828;
+color:#b42323;
+padding:18px;
+border-radius:9px;
+text-align:center;
+font-weight:bold;
+line-height:2;
+}
+
+@media(max-width:500px){
+.header{padding:17px 5px}
+.ministry{font-size:20px}
+.directorate{font-size:18px}
+.school{font-size:17px}
+.system{font-size:20px}
+.search-container{margin-top:45px;padding:18px}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+<div class="ministry">وزارة التربية</div>
+<div class="directorate">مديرية تربية محافظة بابل</div>
+<div class="school">اعدادية الشهيد عادل ناصر</div>
+<div class="system">نظام الاستعلام عن النتائج</div>
+</header>
+
+<main class="search-container">
+
+<div class="search-title">البحث عن نتيجة</div>
+
+<input
+type="text"
+id="searchInput"
+class="search-input"
+placeholder="اكتب الاسم الرباعي"
+autocomplete="off"
+>
+
+<button class="search-button" id="searchButton">
+بحث
+</button>
+
+<div class="message" id="message"></div>
+<div id="resultArea"></div>
+
+</main>
+
+<script type="module">
+
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+getDatabase,
+ref,
+get
+}
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig={
+apiKey:"AIzaSyCn-QppCSS7HVs53G1-DyTnpUX_hloUADk",
+authDomain:"mvhowbv.firebaseapp.com",
+databaseURL:"https://mvhowbv-default-rtdb.firebaseio.com",
+projectId:"mvhowbv",
+storageBucket:"mvhowbv.firebasestorage.app",
+messagingSenderId:"965620777330",
+appId:"1:965620777330:web:9e0d5b9061b9d745da1deb"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+const message=document.getElementById("message");
+const resultArea=document.getElementById("resultArea");
+const searchInput=document.getElementById("searchInput");
+const searchButton=document.getElementById("searchButton");
+
+function normalizeName(name){
+return String(name||"")
+.trim()
+.replace(/\s+/g,"");
+}
+
+async function searchResult(){
+
+const name=searchInput.value.trim();
+
+resultArea.innerHTML="";
+
+if(!name){
+message.textContent="يرجى كتابة اسم الطالب";
+return;
+}
+
+message.textContent="جاري البحث عن النتيجة...";
+searchButton.disabled=true;
+
+try{
+
+const snapshot=await get(ref(db,"publicResults"));
+
+if(!snapshot.exists()){
+message.textContent="لا توجد بيانات طلاب في قاعدة البيانات";
+return;
+}
+
+const students=snapshot.val();
+
+const matches=Object.entries(students).filter(([id,student])=>{
+return normalizeName(student.name)===normalizeName(name);
+});
+
+if(matches.length===0){
+message.textContent="لم يتم العثور على الطالب، تأكد من كتابة الاسم كاملاً";
+return;
+}
+
+message.textContent="";
+
+matches.forEach(([id,student])=>{
+showStudent(student);
+});
+
+}catch(error){
+
+console.error("Firebase Error:",error);
+
+message.textContent=
+"تعذر الاتصال بقاعدة البيانات: "+
+(error.code||"")+
+" "+
+(error.message||"يرجى المحاولة مرة أخرى");
+
+}finally{
+searchButton.disabled=false;
+}
+
+}
+
+function showStudent(student){
+
+const card=document.createElement("div");
+card.className="result-card";
+
+if(student.hidden){
+
+const blocked=document.createElement("div");
+blocked.className="blocked-result";
+
+const title=document.createElement("div");
+title.textContent="تم حجب النتيجة";
+
+const reason=document.createElement("div");
+reason.textContent="سبب الحجب: "+
+(student.blockReason||"لم يتم تحديد السبب");
+
+blocked.append(title,reason);
+card.appendChild(blocked);
+resultArea.appendChild(card);
+return;
+
+}
+
+const title=document.createElement("h3");
+title.textContent="نتيجة الطالب";
+
+const info=document.createElement("div");
+info.className="student-info-box";
+
+info.innerHTML=`
+<div class="student-info-title">معلومات الطالب</div>
+
+<div class="student-info-item">
+<span>اسم الطالب</span>
+<strong>${student.name||"-"}</strong>
+</div>
+
+<div class="student-info-row">
+<div class="student-info-item">
+<span>الصف</span>
+<strong>${student.grade||"-"}</strong>
+</div>
+
+<div class="student-info-item">
+<span>الشعبة</span>
+<strong>${student.section||"-"}</strong>
+</div>
+</div>
+`;
+
+const wrap=document.createElement("div");
+wrap.className="result-table-wrap";
+
+const table=document.createElement("table");
+table.className="result-table";
+
+const thead=document.createElement("thead");
+const headerRow=document.createElement("tr");
+
+[
+"المادة","ش1","ش2","معدل1","نصف سنه",
+"ش1","ش2","معدل2","سعي سنوي","درجه نهائيه"
+    
+    ].forEach(text=>{
+const th=document.createElement("th");
+th.textContent=text;
+headerRow.appendChild(th);
+});
+
+thead.appendChild(headerRow);
+table.appendChild(thead);
+
+const tbody=document.createElement("tbody");
+
+(student.grades||[]).forEach(subject=>{
+
+const row=document.createElement("tr");
+
+const subjectCell=document.createElement("td");
+subjectCell.textContent=subject.subject||"";
+row.appendChild(subjectCell);
+
+for(let i=0;i<9;i++){
+const td=document.createElement("td");
+td.textContent=subject.grades?.[i]||"-";
+row.appendChild(td);
+}
+
+tbody.appendChild(row);
+
+});
+
+table.appendChild(tbody);
+wrap.appendChild(table);
+
+card.append(title,info,wrap);
+resultArea.appendChild(card);
+
+}
+
+searchButton.addEventListener("click",searchResult);
+
+searchInput.addEventListener("keydown",event=>{
+if(event.key==="Enter")searchResult();
+});
+
+</script>
+<style>
+.notes-result-box {
+    background: #fff8e8;
+    border: 2px solid #e6a23c;
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 15px;
+    text-align: right;
+    direction: rtl;
+}
+.notes-result-title {
+    font-weight: bold;
+    color: #9a6200;
+    margin-bottom: 8px;
+}
+.notes-result-text {
+    white-space: pre-wrap;
+    color: #222;
+}
+</style>
+
+<script>
+function showStudentNotes(student) {
+    const old = document.getElementById("studentNotesResult");
+    if (old) old.remove();
+
+    if (!student || student.hidden || !student.notes || !student.notes.trim()) return;
+
+    const box = document.createElement("div");
+    box.id = "studentNotesResult";
+    box.className = "notes-result-box";
+
+    const title = document.createElement("div");
+    title.className = "notes-result-title";
+    title.textContent = "الملاحظات";
+
+    const content = document.createElement("div");
+    content.className = "notes-result-text";
+    content.textContent = student.notes;
+
+    box.append(title, content);
+    document.getElementById("resultArea").appendChild(box);
+}
+</script>
+<style>
+/* ضبط صفحة البحث على الهاتف */
+html, body {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+#resultArea {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    padding: 3px !important;
+    box-sizing: border-box !important;
+}
+
+#resultArea table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+}
+
+#resultArea th,
+#resultArea td {
+    padding: 3px 1px !important;
+    font-size: 8px !important;
+    line-height: 1.4 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    text-align: center !important;
+}
+
+@media (max-width: 480px) {
+    #resultArea th,
+    #resultArea td {
+        font-size: 7px !important;
+        padding: 2px 1px !important;
+    }
+}
+</style>
+<style>
+#resultArea td.low-grade {
+    color: #e00000 !important;
+    background-color: #ffe0e0 !important;
+    font-weight: bold !important;
+}
+</style>
+
+<script>
+function colorLowGrades() {
+    const area = document.getElementById("resultArea");
+    if (!area) return;
+
+    area.querySelectorAll("table td").forEach(td => {
+        const value = td.textContent.trim().replace(/[،,]/g, "");
+        const number = Number(value);
+
+        if (value !== "" && Number.isFinite(number) &&
+            number >= 0 && number < 50) {
+            td.classList.add("low-grade");
+        } else {
+            td.classList.remove("low-grade");
+        }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    colorLowGrades();
+
+    const area = document.getElementById("resultArea");
+    if (area) {
+        new MutationObserver(colorLowGrades).observe(area, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+    }
+});
+</script>
+
+<style>
+/* تقريب جدول النتائج من حافتي الشاشة */
+@media (max-width: 600px) {
+
+    .result-card {
+        padding: 10px 5px !important;
+    }
+
+    .result-table-wrap {
+        width: 100% !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+    }
+
+    #resultArea .result-table {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
+    }
+
+    #resultArea .result-table th,
+    #resultArea .result-table td {
+        font-size: 8px !important;
+        padding: 4px 1px !important;
+        line-height: 1.5 !important;
+        white-space: normal !important;
+        overflow-wrap: break-word !important;
+    }
+}
+</style>
+<style>
+@media (max-width: 600px) {
+
+    /* تصغير بسيط لأعمدة ش فقط */
+    #resultArea .result-table th:nth-child(2),
+    #resultArea .result-table td:nth-child(2),
+    #resultArea .result-table th:nth-child(3),
+    #resultArea .result-table td:nth-child(3),
+    #resultArea .result-table th:nth-child(6),
+    #resultArea .result-table td:nth-child(6),
+    #resultArea .result-table th:nth-child(7),
+    #resultArea .result-table td:nth-child(7) {
+        width: 8% !important;
+    }
+
+    /* توسيع عمود المادة قليلاً */
+    #resultArea .result-table th:first-child,
+    #resultArea .result-table td:first-child {
+        width: 18% !important;
+    }
+
+}
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("th").forEach(th => {
+        const name = th.textContent.trim();
+
+        if (name === "ش1") th.innerHTML = "شهر<br>1";
+        if (name === "ش2") th.innerHTML = "شهر<br>2";
+    });
+});
+</script>
+<script>
+(function () {
+    function changeHeaders() {
+        document.querySelectorAll("th, td").forEach(cell => {
+            const name = cell.textContent.trim().replace(/\s+/g, "");
+
+            if (name === "ش1") {
+                cell.innerHTML = "شهر<br>1";
+            }
+
+            if (name === "ش2") {
+                cell.innerHTML = "شهر<br>2";
+            }
+        });
+    }
+
+    changeHeaders();
+
+    new MutationObserver(changeHeaders).observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+})();
+</script>
+</style>
+<style>
+.student-info-box{
+    background:linear-gradient(135deg,#e3f0ff,#d5e8ff);
+    border:1px solid #8bb9e8;
+    border-radius:10px;
+    padding:10px 13px;
+    margin:5px 0 8px;
+    text-align:right;
+    direction:rtl;
+    box-shadow:0 2px 5px rgba(0,0,0,.10);
+    line-height:2;
+    color:#174b80;
+    font-size:14px;
+    font-weight:bold;
+}
+
+.student-info-box div{
+    padding:1px 0;
+}
+
+.student-info-box span{
+    color:#222;
+    font-weight:bold;
+    margin-right:4px;
+}
+
+.result-card h3{
+    margin-bottom:5px !important;
+}
+
+.result-table-wrap{
+    margin-top:0 !important;
+}
+</style>
+
+<script>
+(function(){
+    function formatStudentInfo(){
+        document.querySelectorAll(".result-info").forEach(info=>{
+            if(info.dataset.formatted==="yes") return;
+
+            const text=info.textContent;
+
+            const name=text.match(/اسم الطالب:\s*(.*?)\s*\|\s*الصف:/);
+            const grade=text.match(/الصف:\s*(.*?)\s*\|\s*الشعبة:/);
+            const section=text.match(/الشعبة:\s*(.*)/);
+
+            if(!name || !grade || !section) return;
+
+            const box=document.createElement("div");
+            box.className="student-info-box";
+
+            const nameRow=document.createElement("div");
+            nameRow.innerHTML="الاســم: <span></span>";
+            nameRow.querySelector("span").textContent=name[1];
+
+            const gradeRow=document.createElement("div");
+            gradeRow.innerHTML="الصـف: <span></span>";
+            gradeRow.querySelector("span").textContent=grade[1];
+
+            const sectionRow=document.createElement("div");
+            sectionRow.innerHTML="الشعبة: <span></span>";
+            sectionRow.querySelector("span").textContent=section[1];
+
+            box.append(nameRow,gradeRow,sectionRow);
+            info.replaceWith(box);
+        });
+    }
+
+    formatStudentInfo();
+
+    const observer=new MutationObserver(formatStudentInfo);
+    observer.observe(document.getElementById("resultArea"),{
+        childList:true,
+        subtree:true
+    });
+})();
+</script>
+<style>
+.student-info-box{
+    background:linear-gradient(135deg,#e3f0ff,#d5e8ff);
+    border:1px solid #8bb9e8;
+    border-radius:10px;
+    padding:10px 13px;
+    margin:5px 0 8px;
+    text-align:right;
+    direction:rtl;
+    box-shadow:0 2px 5px rgba(0,0,0,.10);
+    line-height:2;
+    color:#174b80;
+    font-size:14px;
+    font-weight:bold;
+}
+
+.student-info-box div{
+    padding:1px 0;
+}
+
+.student-info-box span{
+    color:#222;
+    font-weight:bold;
+    margin-right:4px;
+}
+
+.result-card h3{
+    margin-bottom:5px !important;
+}
+
+.result-table-wrap{
+    margin-top:0 !important;
+}
+</style>
+
+<script>
+(function(){
+    function formatStudentInfo(){
+        document.querySelectorAll(".result-info").forEach(info=>{
+            if(info.dataset.formatted==="yes") return;
+
+            const text=info.textContent;
+
+            const name=text.match(/اسم الطالب:\s*(.*?)\s*\|\s*الصف:/);
+            const grade=text.match(/الصف:\s*(.*?)\s*\|\s*الشعبة:/);
+            const section=text.match(/الشعبة:\s*(.*)/);
+
+            if(!name || !grade || !section) return;
+
+            const box=document.createElement("div");
+            box.className="student-info-box";
+
+            const nameRow=document.createElement("div");
+            nameRow.innerHTML="الاســم: <span></span>";
+            nameRow.querySelector("span").textContent=name[1];
+
+            const gradeRow=document.createElement("div");
+            gradeRow.innerHTML="الصـف: <span></span>";
+            gradeRow.querySelector("span").textContent=grade[1];
+
+            const sectionRow=document.createElement("div");
+            sectionRow.innerHTML="الشعبة: <span></span>";
+            sectionRow.querySelector("span").textContent=section[1];
+
+            box.append(nameRow,gradeRow,sectionRow);
+            info.replaceWith(box);
+        });
+    }
+
+    formatStudentInfo();
+
+    const observer=new MutationObserver(formatStudentInfo);
+    observer.observe(document.getElementById("resultArea"),{
+        childList:true,
+        subtree:true
+    });
+})();
+</script>
+<style>
+/* تثخين جميع خلايا جدول الدرجات */
+#resultArea .result-table th,
+#resultArea .result-table td{
+    font-weight:1000 !important;
+    -webkit-text-stroke:0.45px currentColor !important;
+    text-shadow:0.2px 0 currentColor,
+                -0.2px 0 currentColor !important;
+}
+
+/* تثخين أسماء المواد */
+#resultArea .result-table td:first-child{
+    -webkit-text-stroke:0.6px currentColor !important;
+}
+
+/* تثخين الأرقام */
+#resultArea .result-table td:not(:first-child){
+    font-weight:500 !important;
+    -webkit-text-stroke:0.5px currentColor !important;
+}
+</style>
+<style>
+#resultArea .result-table th,
+#resultArea .result-table td{
+    font-weight:500 !important;
+    -webkit-text-stroke:0 !important;
+    text-shadow:none !important;
+}
+</style>
+</body>
+</html>
+
